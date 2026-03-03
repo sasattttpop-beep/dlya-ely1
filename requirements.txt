@@ -11,6 +11,5 @@ torchvision==0.16.0
 diffusers==0.24.0
 transformers==4.35.0
 accelerate==0.24.1
-elevenlabs==0.2.22  # ← понизил версию
 soundfile==0.12.1
 apscheduler==3.10.4
