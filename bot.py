@@ -211,8 +211,16 @@ async def main():
     scheduler.add_job(send_morning_compliment, 'cron', hour=8, minute=0)
     scheduler.start()
     
+    # ТЕСТ: отправить сообщение через 2 минуты после запуска
+    async def send_test():
+        await asyncio.sleep(120)  # 120 секунд = 2 минуты
+        try:
+            await bot.send_message(6756512561, "🔄 Тест через 2 минуты! Если видишь это - утренние комплименты будут работать 👌")
+            print("✅ Тест отправлен")
+        except Exception as e:
+            print(f"❌ Ошибка: {e}")
+    
+    # Запускаем тест в фоне
+    asyncio.create_task(send_test())
+    
     await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
