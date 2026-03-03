@@ -6,21 +6,17 @@ import random
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile
+from aiogram.types import Message
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import requests
-from elevenlabs import generate, set_api_key
-import torch
-from diffusers import StableDiffusionPipeline
 from PIL import Image
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
-ELEVENLABS_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -31,9 +27,6 @@ client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_KEY,
 )
-
-# ElevenLabs
-set_api_key(ELEVENLABS_KEY)
 
 # База данных
 conn = sqlite3.connect('memory.db')
@@ -56,13 +49,9 @@ MORNING_COMPLIMENTS = [
     f"Новый день — новая возможность быть счастливой. Ты справишься! 🌸"
 ]
 
-# Пути для моделей (создай папки)
+# Пути для моделей
 os.makedirs("models", exist_ok=True)
 os.makedirs("generated", exist_ok=True)
-os.makedirs("voice", exist_ok=True)
-
-# Загрузка модели для генерации фото (будет позже)
-# pipe = None
 
 @dp.message(Command("start"))
 async def start(message: Message):
@@ -70,8 +59,6 @@ async def start(message: Message):
                          f"Команды:\n"
                          f"/compliment - получить комплимент\n"
                          f"/mood [текст] - рассказать о настроении\n"
-                         f"/voice [текст] - озвучить текст голосом\n"
-                         f"/photo [запрос] - сгенерировать фото\n"
                          f"/remember - что я помню о тебе")
 
 @dp.message(Command("compliment"))
@@ -90,57 +77,10 @@ async def set_mood(message: Message):
     else:
         await message.answer("Напиши свое настроение после /mood, например: /mood сегодня грустно")
 
-@dp.message(Command("voice"))
-async def voice_message(message: Message):
-    text = message.text.replace("/voice", "").strip()
-    if not text:
-        await message.answer("Напиши текст после /voice")
-        return
-    
-    try:
-        # Генерация голоса через ElevenLabs
-        audio = generate(
-            text=text,
-            voice="Bella",  # Можно заменить на клонированный голос
-            model="eleven_monolingual_v1"
-        )
-        
-        # Сохраняем и отправляем
-        audio_path = f"voice/msg_{datetime.now().timestamp()}.mp3"
-        with open(audio_path, "wb") as f:
-            f.write(audio)
-        
-        await message.answer_voice(FSInputFile(audio_path))
-        os.remove(audio_path)
-    except Exception as e:
-        await message.answer(f"Ошибка генерации голоса: {e}")
-
-@dp.message(Command("photo"))
-async def generate_photo(message: Message):
-    prompt = message.text.replace("/photo", "").strip()
-    if not prompt:
-        await message.answer("Напиши запрос после /photo, например: /photo девушка в космосе")
-        return
-    
-    await message.answer("🖼️ Генерирую фото... это займет около минуты")
-    
-    try:
-        # Здесь будет LoRA модель с ее лицом
-        # Пока просто заглушка
-        await asyncio.sleep(2)
-        await message.answer("⚠️ Модуль генерации фото настраивается. Нужно обучить модель на ее фото.")
-        
-        # Когда обучишь LoRA:
-        # image = pipe(prompt + " mygirl").images[0]
-        # image.save(f"generated/photo_{datetime.now().timestamp()}.png")
-        # await message.answer_photo(FSInputFile(f"generated/photo_{datetime.now().timestamp()}.png"))
-    except Exception as e:
-        await message.answer(f"Ошибка генерации: {e}")
-
 @dp.message(Command("remember"))
 async def remember(message: Message):
     user_id = message.from_user.id
-    c.execute("SELECT mood, last_photo FROM user_data WHERE user_id=?", (user_id,))
+    c.execute("SELECT mood FROM user_data WHERE user_id=?", (user_id,))
     data = c.fetchone()
     
     if data and data[0]:
@@ -156,11 +96,9 @@ async def chat(message: Message):
     if not text:
         return
     
-    # Анализ фото, если прислали
+    # Если прислали фото
     if message.photo:
-        await message.answer("📸 Обрабатываю фото...")
-        # Здесь будет анализ эмоций
-        await message.answer("Ты прекрасна на этом фото! ✨")
+        await message.answer("📸 Ты прекрасна на этом фото! ✨")
         return
     
     # Обычный диалог через OpenRouter
@@ -193,34 +131,36 @@ async def chat(message: Message):
         await message.answer(f"Ошибка: {e}")
 
 async def send_morning_compliment():
-    # Здесь должен быть ID чата с девушкой
-    # Пока просто заглушка
     chat_id = os.getenv("GIRL_CHAT_ID")
     if chat_id:
         try:
             compliment = random.choice(MORNING_COMPLIMENTS)
             await bot.send_message(chat_id, compliment)
-            
-            # Можно добавить музыку
-            # await bot.send_audio(chat_id, FSInputFile("music/morning_song.mp3"))
-        except:
-            pass
+            print(f"✅ Утренний комплимент отправлен {chat_id}")
+        except Exception as e:
+            print(f"❌ Ошибка отправки комплимента: {e}")
+
+async def send_test_message():
+    """Тестовая отправка через 2 минуты после запуска"""
+    await asyncio.sleep(120)
+    chat_id = os.getenv("GIRL_CHAT_ID")
+    if chat_id:
+        try:
+            await bot.send_message(chat_id, "🔔 Тест! Если видишь это - бот работает и утренние комплименты будут приходить 👌")
+            print("✅ Тест отправлен")
+        except Exception as e:
+            print(f"❌ Ошибка теста: {e}")
 
 async def main():
     # Планировщик для утренних комплиментов
     scheduler.add_job(send_morning_compliment, 'cron', hour=8, minute=0)
     scheduler.start()
     
-    # ТЕСТ: отправить сообщение через 2 минуты после запуска
-    async def send_test():
-        await asyncio.sleep(120)  # 120 секунд = 2 минуты
-        try:
-            await bot.send_message(6756512561, "🔄 Тест через 2 минуты! Если видишь это - утренние комплименты будут работать 👌")
-            print("✅ Тест отправлен")
-        except Exception as e:
-            print(f"❌ Ошибка: {e}")
-    
-    # Запускаем тест в фоне
-    asyncio.create_task(send_test())
+    # Запускаем тест через 2 минуты
+    asyncio.create_task(send_test_message())
     
     await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())
